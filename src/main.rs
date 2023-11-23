@@ -467,7 +467,7 @@ impl AIPlayer {
         if depth >= 2 {
             let mut items = Vec::new();
             for &pos in &moves {
-                let score = -self.evaluate(&board.do_move(pos), endgame);
+                let score = -self.evaluate(&board.do_move(pos), false);
                 items.push((score, pos));
             }
             items.sort_by(|(a, _), (b, _)| b.cmp(a));
