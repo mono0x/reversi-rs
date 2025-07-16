@@ -443,7 +443,7 @@ impl AIPlayer {
         let beta = i32::MAX;
         let mut best_pos = 0;
         for &pos in &moves {
-            let score = -self.negamax(&board.do_move(pos), depth, endgame, -beta, -alpha);
+            let score = -self.negamax(&board.do_move(pos), false, depth, endgame, -beta, -alpha);
             if score > alpha {
                 alpha = score;
                 best_pos = pos;
@@ -452,13 +452,24 @@ impl AIPlayer {
         best_pos
     }
 
-    fn negamax(&self, board: &BitBoard, depth: u32, endgame: bool, alpha: i32, beta: i32) -> i32 {
-        if depth == 0 || board.game_over() {
+    fn negamax(
+        &self,
+        board: &BitBoard,
+        passed: bool,
+        depth: u32,
+        endgame: bool,
+        alpha: i32,
+        beta: i32,
+    ) -> i32 {
+        if depth == 0 {
             return self.evaluate(board, endgame);
         }
         let moves = board.legal_moves_vec();
         if moves.is_empty() {
-            return -self.negamax(&board.do_pass(), depth - 1, endgame, alpha, beta);
+            if passed {
+                return self.evaluate(board, endgame);
+            }
+            return -self.negamax(&board.do_pass(), true, depth - 1, endgame, alpha, beta);
         }
         let mut alpha = alpha;
         let mut best = -i32::MAX;
@@ -477,7 +488,14 @@ impl AIPlayer {
         }
 
         for pos in ordered {
-            let score = -self.negamax(&board.do_move(pos), depth - 1, endgame, -beta, -alpha);
+            let score = -self.negamax(
+                &board.do_move(pos),
+                false,
+                depth - 1,
+                endgame,
+                -beta,
+                -alpha,
+            );
             if score >= beta {
                 return score;
             }
