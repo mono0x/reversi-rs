@@ -295,6 +295,7 @@ trait Player {
     fn next_move(&mut self, board: &BitBoard) -> io::Result<u64>;
 }
 
+#[allow(dead_code)]
 struct HumanPlayer {}
 
 impl Player for HumanPlayer {
