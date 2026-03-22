@@ -292,14 +292,14 @@ fn test_board_do_move() {
 }
 
 trait Player {
-    fn next_move(&mut self, board: &BitBoard) -> io::Result<u64>;
+    fn next_move(&self, board: &BitBoard) -> io::Result<u64>;
 }
 
 #[allow(dead_code)]
 struct HumanPlayer {}
 
 impl Player for HumanPlayer {
-    fn next_move(&mut self, board: &BitBoard) -> io::Result<u64> {
+    fn next_move(&self, board: &BitBoard) -> io::Result<u64> {
         let re = Regex::new(r"^[a-h][1-8]$").unwrap();
         let legal_moves = board.legal_moves();
         loop {
@@ -331,7 +331,7 @@ impl Player for HumanPlayer {
 struct RandomPlayer {}
 
 impl Player for RandomPlayer {
-    fn next_move(&mut self, board: &BitBoard) -> io::Result<u64> {
+    fn next_move(&self, board: &BitBoard) -> io::Result<u64> {
         let moves = board.legal_moves_vec();
         Ok(moves[rand::random::<usize>() % moves.len()])
     }
@@ -548,7 +548,7 @@ impl AIPlayer {
 }
 
 impl Player for AIPlayer {
-    fn next_move(&mut self, board: &BitBoard) -> io::Result<u64> {
+    fn next_move(&self, board: &BitBoard) -> io::Result<u64> {
         Ok(self.search(board))
     }
 }
