@@ -1,4 +1,5 @@
 use crate::bitboard::BitBoard;
+use rand::seq::SliceRandom;
 
 #[rustfmt::skip]
 const WEIGHT: [i32; 64] = [
@@ -158,17 +159,17 @@ impl AIPlayer {
                 score
             }
         };
-        let mut moves = board.legal_moves();
-        if moves == 0 {
+        let mut moves = board.legal_moves_vec();
+        if moves.is_empty() {
             return (
                 0,
                 outcome(self.negamax(board, false, depth.saturating_add(1), endgame, alpha, beta)),
             );
         }
+        moves.shuffle(&mut rand::thread_rng());
         let mut best = -i32::MAX;
-        let mut best_pos = 0x8000_0000_0000_0000 >> moves.leading_zeros();
-        while moves != 0 {
-            let pos = take_move(&mut moves);
+        let mut best_pos = moves[0];
+        for pos in moves {
             let score = -self.negamax(&board.do_move(pos), false, depth, endgame, -beta, -alpha);
             if score > best {
                 best = score;
