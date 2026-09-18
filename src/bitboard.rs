@@ -84,8 +84,19 @@ impl BitBoard {
         const fn flip_bits_dir(black: u64, white: u64, pos: u64, shift: u32, mask: u64) -> u64 {
             let mask = white & mask; // apply mask to prevent overflow by edge of board
 
-            let left = adjacents!(pos, mask, shift_l, shift);
-            let right = adjacents!(pos, mask, shift_r, shift);
+            // Extend by 1, 1, 2, 2 discs to cover six opponents with fewer dependent steps.
+            macro_rules! expand {
+                ($shift:ident) => {{
+                    let mut run = mask & $shift(pos, shift);
+                    run |= mask & $shift(run, shift);
+                    let pairs = mask & $shift(mask, shift);
+                    run |= pairs & $shift(run, 2 * shift);
+                    run |= pairs & $shift(run, 2 * shift);
+                    run
+                }};
+            }
+            let left = expand!(shift_l);
+            let right = expand!(shift_r);
             // A run flips only when its far end is bounded by our own disc.
             let left = if shift_l(left, shift) & black != 0 {
                 left
