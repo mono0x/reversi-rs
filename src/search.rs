@@ -202,7 +202,12 @@ impl AIPlayer {
         let mut count = 0;
         while moves != 0 {
             let child = board.do_move(take_move(&mut moves));
-            children[count] = (-self.evaluate(&child, false), child);
+            let priority = if endgame {
+                -(child.legal_moves().count_ones() as i32)
+            } else {
+                -self.evaluate(&child, false)
+            };
+            children[count] = (priority, child);
             count += 1;
         }
         let children = &mut children[..count];
