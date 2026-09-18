@@ -122,7 +122,11 @@ impl BitBoard {
         if self.legal_moves() != 0 {
             return false;
         }
-        self.clone().do_pass().legal_moves() == 0
+        Self {
+            bits: (self.bits.1, self.bits.0),
+        }
+        .legal_moves()
+            == 0
     }
 
     //   abcdefgh
