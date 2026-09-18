@@ -12,6 +12,31 @@ const WEIGHT: [i32; 64] = [
     120, -20,  20,   5,   5,  20, -20, 120,
 ];
 
+const WEIGHT_MASKS: [(i32, u64); 8] = {
+    let mut groups = [
+        (-40, 0),
+        (-20, 0),
+        (-5, 0),
+        (3, 0),
+        (5, 0),
+        (15, 0),
+        (20, 0),
+        (120, 0),
+    ];
+    let mut group = 0;
+    while group < groups.len() {
+        let mut index = 0;
+        while index < WEIGHT.len() {
+            if WEIGHT[index] == groups[group].0 {
+                groups[group].1 |= 0x8000_0000_0000_0000 >> index;
+            }
+            index += 1;
+        }
+        group += 1;
+    }
+    groups
+};
+
 const STABLE_WEIGHT: i32 = 120;
 
 const STABLE_PATTERNS: [u64; 8] = [
@@ -214,15 +239,11 @@ impl AIPlayer {
         if white == 0 {
             return i32::MAX;
         }
-        let mut pos = 0x8000_0000_0000_0000;
         let mut score = 0;
-        for i in 0..64 {
-            if board.bits.0 & pos != 0 {
-                score += WEIGHT[i];
-            } else if board.bits.1 & pos != 0 {
-                score -= WEIGHT[i];
-            }
-            pos >>= 1;
+        for (weight, mask) in WEIGHT_MASKS {
+            score += weight
+                * ((board.bits.0 & mask).count_ones() as i32
+                    - (board.bits.1 & mask).count_ones() as i32);
         }
         for pattern in STABLE_PATTERNS {
             if board.bits.0 & pattern == pattern {
@@ -243,6 +264,64 @@ fn take_move(moves: &mut u64) -> u64 {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn evaluation_matches_square_weights() {
+        use super::{AIPlayer, STABLE_PATTERNS, STABLE_WEIGHT, WEIGHT};
+        use crate::bitboard::BitBoard;
+        use rand::{rngs::StdRng, Rng, SeedableRng};
+
+        fn reference(board: BitBoard, endgame: bool) -> i32 {
+            if endgame {
+                return board.bits.0.count_ones() as i32 - board.bits.1.count_ones() as i32;
+            }
+            if board.bits.0 == 0 {
+                return -i32::MAX;
+            }
+            if board.bits.1 == 0 {
+                return i32::MAX;
+            }
+            let mut score = 0;
+            for (index, weight) in WEIGHT.iter().enumerate() {
+                let pos = 0x8000_0000_0000_0000 >> index;
+                if board.bits.0 & pos != 0 {
+                    score += weight;
+                } else if board.bits.1 & pos != 0 {
+                    score -= weight;
+                }
+            }
+            for pattern in STABLE_PATTERNS {
+                if board.bits.0 & pattern == pattern {
+                    score += STABLE_WEIGHT;
+                } else if board.bits.1 & pattern == pattern {
+                    score -= STABLE_WEIGHT;
+                }
+            }
+            score
+        }
+        let mut random = StdRng::seed_from_u64(0);
+        for _ in 0..10_000 {
+            let current = random.gen::<u64>();
+            let board = BitBoard {
+                bits: (current, random.gen::<u64>() & !current),
+            };
+            for endgame in [false, true] {
+                assert_eq!(
+                    AIPlayer {}.evaluate(&board, endgame),
+                    reference(board, endgame)
+                );
+            }
+        }
+        for bits in [(0, 0), (0, u64::MAX), (u64::MAX, 0)] {
+            for endgame in [false, true] {
+                let board = BitBoard { bits };
+                assert_eq!(
+                    AIPlayer {}.evaluate(&board, endgame),
+                    reference(board, endgame)
+                );
+            }
+        }
+    }
+
     #[test]
     fn chooses_a_legal_move_when_every_move_loses() {
         use super::AIPlayer;
