@@ -14,8 +14,8 @@ fn positions() -> Vec<(&'static str, BitBoard, u32, bool)> {
     let mut positions = Vec::new();
     let mut played = 0;
     while !board.game_over() {
-        let moves = board.legal_moves();
-        if moves == 0 {
+        let moves = board.legal_moves_vec();
+        if moves.is_empty() {
             board = board.do_pass();
             continue;
         }
@@ -27,7 +27,7 @@ fn positions() -> Vec<(&'static str, BitBoard, u32, bool)> {
             52 => positions.push(("endgame_8", board, u32::MAX, true)),
             _ => {}
         }
-        board = board.do_move(1u64 << moves.trailing_zeros());
+        board = board.do_move(*moves.last().unwrap());
         played += 1;
     }
     assert_eq!(positions.len(), 5);

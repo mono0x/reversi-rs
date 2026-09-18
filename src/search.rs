@@ -112,8 +112,8 @@ impl AIPlayer {
         depth: u32,
         endgame: bool,
     ) -> (u64, i32) {
-        let moves = board.legal_moves_vec();
-        if moves.is_empty() {
+        let mut moves = board.legal_moves();
+        if moves == 0 {
             return (
                 0,
                 self.negamax(
@@ -128,8 +128,9 @@ impl AIPlayer {
         }
         let mut alpha = -i32::MAX;
         let beta = i32::MAX;
-        let mut best_pos = moves[0];
-        for &pos in &moves {
+        let mut best_pos = 0x8000_0000_0000_0000 >> moves.leading_zeros();
+        while moves != 0 {
+            let pos = take_move(&mut moves);
             let score = -self.negamax(&board.do_move(pos), false, depth, endgame, -beta, -alpha);
             if score > alpha {
                 alpha = score;
@@ -151,8 +152,8 @@ impl AIPlayer {
         if depth == 0 {
             return self.evaluate(board, endgame);
         }
-        let moves = board.legal_moves_vec();
-        if moves.is_empty() {
+        let mut moves = board.legal_moves();
+        if moves == 0 {
             if passed {
                 return self.evaluate(board, endgame);
             }
@@ -161,28 +162,29 @@ impl AIPlayer {
         let mut alpha = alpha;
         let mut best = -i32::MAX;
 
-        let ordered;
-        if depth >= 2 {
-            let mut items = Vec::new();
-            for &pos in &moves {
-                let score = -self.evaluate(&board.do_move(pos), false);
-                items.push((score, pos));
+        if depth == 1 {
+            while moves != 0 {
+                let score = -self.evaluate(&board.do_move(take_move(&mut moves)), endgame);
+                if score >= beta {
+                    return score;
+                }
+                best = best.max(score);
             }
-            items.sort_by(|(a, _), (b, _)| b.cmp(a));
-            ordered = items.iter().map(|(_, pos)| *pos).collect::<Vec<_>>();
-        } else {
-            ordered = moves;
+            return best;
         }
 
-        for pos in ordered {
-            let score = -self.negamax(
-                &board.do_move(pos),
-                false,
-                depth - 1,
-                endgame,
-                -beta,
-                -alpha,
-            );
+        let mut children = [(0, *board); 64];
+        let mut count = 0;
+        while moves != 0 {
+            let child = board.do_move(take_move(&mut moves));
+            children[count] = (-self.evaluate(&child, false), child);
+            count += 1;
+        }
+        let children = &mut children[..count];
+        children.sort_unstable_by(|a, b| b.0.cmp(&a.0));
+
+        for &(_, child) in children.iter() {
+            let score = -self.negamax(&child, false, depth - 1, endgame, -beta, -alpha);
             if score >= beta {
                 return score;
             }
@@ -231,6 +233,12 @@ impl AIPlayer {
         }
         score
     }
+}
+
+fn take_move(moves: &mut u64) -> u64 {
+    let pos = 0x8000_0000_0000_0000 >> moves.leading_zeros();
+    *moves ^= pos;
+    pos
 }
 
 #[cfg(test)]
