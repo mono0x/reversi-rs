@@ -78,28 +78,33 @@ impl BitBoard {
 
     pub fn do_move(&self, pos: u64) -> Self {
         assert_eq!(pos.count_ones(), 1);
-        assert_eq!(self.legal_moves() & pos, pos);
+        assert_eq!((self.bits.0 | self.bits.1) & pos, 0);
 
         #[inline]
         const fn flip_bits_dir(black: u64, white: u64, pos: u64, shift: u32, mask: u64) -> u64 {
             let mask = white & mask; // apply mask to prevent overflow by edge of board
 
-            // find adjacents starting from pos
-            let l1 = adjacents!(pos, mask, shift_l, shift);
-            let r2 = adjacents!(pos, mask, shift_r, shift);
-
-            // find adjacents starting from opposide side across the opponents
-            let l2 = adjacents!(black, mask, shift_l, shift);
-            let r1 = adjacents!(black, mask, shift_r, shift);
-
-            // common adjacents starting from both sides can be flippable
-            (l1 & r1) | (r2 & l2)
+            let left = adjacents!(pos, mask, shift_l, shift);
+            let right = adjacents!(pos, mask, shift_r, shift);
+            // A run flips only when its far end is bounded by our own disc.
+            let left = if shift_l(left, shift) & black != 0 {
+                left
+            } else {
+                0
+            };
+            let right = if shift_r(right, shift) & black != 0 {
+                right
+            } else {
+                0
+            };
+            left | right
         }
 
         let mut flip = 0;
         for (shift, mask) in Self::SHIFT_AND_MASKS {
             flip |= flip_bits_dir(self.bits.0, self.bits.1, pos, shift, mask);
         }
+        assert_ne!(flip, 0);
         let new_black = self.bits.0 ^ flip ^ pos;
         let new_white = self.bits.1 ^ flip;
 
@@ -358,6 +363,30 @@ mod tests {
             }
         }
 
+        // Exercise every straight six-disc capture, including board edges.
+        for start in 0..64 {
+            for (dx, dy) in [
+                (-1, -1),
+                (0, -1),
+                (1, -1),
+                (-1, 0),
+                (1, 0),
+                (-1, 1),
+                (0, 1),
+                (1, 1),
+            ] {
+                let (x, y) = (start % 8, start / 8);
+                if !(0..8).contains(&(x + 7 * dx)) || !(0..8).contains(&(y + 7 * dy)) {
+                    continue;
+                }
+                let opponent = (1..7).fold(0, |mask, step| {
+                    mask | (1u64 << ((y + step * dy) * 8 + x + step * dx))
+                });
+                check_board(BitBoard {
+                    bits: (1u64 << start, opponent),
+                });
+            }
+        }
         let mut random = StdRng::seed_from_u64(0);
         for _ in 0..2_000 {
             let current = random.gen::<u64>();
