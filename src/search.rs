@@ -113,9 +113,22 @@ impl AIPlayer {
         endgame: bool,
     ) -> (u64, i32) {
         let moves = board.legal_moves_vec();
+        if moves.is_empty() {
+            return (
+                0,
+                self.negamax(
+                    board,
+                    false,
+                    depth.saturating_add(1),
+                    endgame,
+                    -i32::MAX,
+                    i32::MAX,
+                ),
+            );
+        }
         let mut alpha = -i32::MAX;
         let beta = i32::MAX;
-        let mut best_pos = 0;
+        let mut best_pos = moves[0];
         for &pos in &moves {
             let score = -self.negamax(&board.do_move(pos), false, depth, endgame, -beta, -alpha);
             if score > alpha {
@@ -143,7 +156,7 @@ impl AIPlayer {
             if passed {
                 return self.evaluate(board, endgame);
             }
-            return -self.negamax(&board.do_pass(), true, depth - 1, endgame, alpha, beta);
+            return -self.negamax(&board.do_pass(), true, depth - 1, endgame, -beta, -alpha);
         }
         let mut alpha = alpha;
         let mut best = -i32::MAX;
@@ -217,5 +230,99 @@ impl AIPlayer {
             }
         }
         score
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn chooses_a_legal_move_when_every_move_loses() {
+        use super::AIPlayer;
+        use crate::bitboard::BitBoard;
+
+        let board = BitBoard {
+            bits: (1 << 37, (1 << 39) | (1 << 38) | (1 << 36)),
+        };
+        assert_eq!(
+            AIPlayer {}.search_with_depth(&board, 1, false),
+            (1 << 35, -i32::MAX)
+        );
+    }
+
+    #[test]
+    fn search_matches_minimax() {
+        use super::AIPlayer;
+        use crate::bitboard::BitBoard;
+        use rand::{rngs::StdRng, Rng, SeedableRng};
+
+        fn minimax(player: &AIPlayer, board: BitBoard, depth: u32, endgame: bool) -> i32 {
+            if depth == 0 || board.game_over() {
+                return player.evaluate(&board, endgame);
+            }
+            let moves = board.legal_moves_vec();
+            if moves.is_empty() {
+                return -minimax(player, board.do_pass(), depth - 1, endgame);
+            }
+            moves
+                .into_iter()
+                .map(|pos| -minimax(player, board.do_move(pos), depth - 1, endgame))
+                .max()
+                .unwrap()
+        }
+
+        let player = AIPlayer {};
+        let mut random = StdRng::seed_from_u64(42);
+        let mut passes = 0;
+        for _ in 0..16 {
+            let mut board = BitBoard::new();
+            let mut turn = 0;
+            loop {
+                let moves = board.legal_moves_vec();
+                let endgame = (board.bits.0 | board.bits.1).count_zeros() <= 5;
+                let depth = if endgame { 12 } else { 2 };
+                if turn % 8 == 0 || endgame || moves.is_empty() {
+                    let expected = minimax(&player, board, depth + 1, endgame);
+                    let (pos, score) = player.search_with_depth(&board, depth, endgame);
+                    assert_eq!(score, expected, "board={board:?}, depth={depth}");
+                    if moves.is_empty() {
+                        assert_eq!(pos, 0);
+                    } else {
+                        assert!(moves.contains(&pos), "board={board:?}, pos={pos:#x}");
+                        assert_eq!(
+                            -minimax(&player, board.do_move(pos), depth, endgame),
+                            expected
+                        );
+                    }
+                }
+                if board.game_over() {
+                    break;
+                }
+                if moves.is_empty() {
+                    passes += 1;
+                    let exact = minimax(&player, board, 4, false);
+                    if exact.abs() < i32::MAX - 2 {
+                        for (alpha, beta) in [
+                            (exact - 1, exact + 1),
+                            (exact - 2, exact - 1),
+                            (exact + 1, exact + 2),
+                        ] {
+                            let result = player.negamax(&board, false, 4, false, alpha, beta);
+                            if exact <= alpha {
+                                assert!(result <= alpha);
+                            } else if exact >= beta {
+                                assert!(result >= beta);
+                            } else {
+                                assert_eq!(result, exact);
+                            }
+                        }
+                    }
+                    board = board.do_pass();
+                } else {
+                    board = board.do_move(moves[random.gen_range(0..moves.len())]);
+                }
+                turn += 1;
+            }
+        }
+        assert!(passes > 0);
     }
 }
