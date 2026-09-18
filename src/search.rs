@@ -122,12 +122,19 @@ const STABLE_PATTERNS: [u64; 8] = [
     0x0000_0000_0001_0101,
 ];
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SearchMode {
+    Midgame,
+    Wdl,
+    Exact,
+}
+
 pub(crate) struct AIPlayer {}
 
 impl AIPlayer {
     pub(crate) fn search(&self, board: &BitBoard) -> u64 {
-        let (depth, endgame) = self.parameters(board);
-        self.search_with_depth(board, depth, endgame).0
+        let (depth, mode) = self.parameters(board);
+        self.search_with_depth(board, depth, mode).0
     }
 
     // Depth counts plies after the root move, matching the game player's search.
@@ -135,34 +142,44 @@ impl AIPlayer {
         &self,
         board: &BitBoard,
         depth: u32,
-        endgame: bool,
+        mode: SearchMode,
     ) -> (u64, i32) {
+        let endgame = mode != SearchMode::Midgame;
+        // A narrow window proves the outcome without resolving the final margin.
+        let (mut alpha, beta) = if mode == SearchMode::Wdl {
+            (-1, 1)
+        } else {
+            (-i32::MAX, i32::MAX)
+        };
+        let outcome = |score: i32| {
+            if mode == SearchMode::Wdl {
+                score.signum()
+            } else {
+                score
+            }
+        };
         let mut moves = board.legal_moves();
         if moves == 0 {
             return (
                 0,
-                self.negamax(
-                    board,
-                    false,
-                    depth.saturating_add(1),
-                    endgame,
-                    -i32::MAX,
-                    i32::MAX,
-                ),
+                outcome(self.negamax(board, false, depth.saturating_add(1), endgame, alpha, beta)),
             );
         }
-        let mut alpha = -i32::MAX;
-        let beta = i32::MAX;
+        let mut best = -i32::MAX;
         let mut best_pos = 0x8000_0000_0000_0000 >> moves.leading_zeros();
         while moves != 0 {
             let pos = take_move(&mut moves);
             let score = -self.negamax(&board.do_move(pos), false, depth, endgame, -beta, -alpha);
-            if score > alpha {
-                alpha = score;
+            if score > best {
+                best = score;
                 best_pos = pos;
             }
+            alpha = alpha.max(score);
+            if alpha >= beta {
+                break;
+            }
         }
-        (best_pos, alpha)
+        (best_pos, outcome(best))
     }
 
     fn negamax(
@@ -235,11 +252,11 @@ impl AIPlayer {
         best
     }
 
-    fn parameters(&self, board: &BitBoard) -> (u32, bool) {
-        if (board.bits.0 | board.bits.1).count_zeros() <= 14 {
-            return (u32::MAX, true);
-        } else {
-            return (9, false);
+    fn parameters(&self, board: &BitBoard) -> (u32, SearchMode) {
+        match (board.bits.0 | board.bits.1).count_zeros() {
+            0..=16 => (u32::MAX, SearchMode::Exact),
+            17..=18 => (u32::MAX, SearchMode::Wdl),
+            _ => (9, SearchMode::Midgame),
         }
     }
 
@@ -340,21 +357,21 @@ mod tests {
 
     #[test]
     fn chooses_a_legal_move_when_every_move_loses() {
-        use super::AIPlayer;
+        use super::{AIPlayer, SearchMode};
         use crate::bitboard::BitBoard;
 
         let board = BitBoard {
             bits: (1 << 37, (1 << 39) | (1 << 38) | (1 << 36)),
         };
         assert_eq!(
-            AIPlayer {}.search_with_depth(&board, 1, false),
+            AIPlayer {}.search_with_depth(&board, 1, SearchMode::Midgame),
             (1 << 35, -i32::MAX)
         );
     }
 
     #[test]
     fn search_matches_minimax() {
-        use super::AIPlayer;
+        use super::{AIPlayer, SearchMode};
         use crate::bitboard::BitBoard;
         use rand::{rngs::StdRng, Rng, SeedableRng};
 
@@ -376,6 +393,8 @@ mod tests {
         let player = AIPlayer {};
         let mut random = StdRng::seed_from_u64(42);
         let mut passes = 0;
+        let mut outcomes = [false; 3];
+        let mut endgame_passes = 0;
         for _ in 0..16 {
             let mut board = BitBoard::new();
             let mut turn = 0;
@@ -385,7 +404,30 @@ mod tests {
                 let depth = if endgame { 12 } else { 2 };
                 if turn % 8 == 0 || endgame || moves.is_empty() {
                     let expected = minimax(&player, board, depth + 1, endgame);
-                    let (pos, score) = player.search_with_depth(&board, depth, endgame);
+                    let mode = if endgame {
+                        SearchMode::Exact
+                    } else {
+                        SearchMode::Midgame
+                    };
+                    let (pos, score) = player.search_with_depth(&board, depth, mode);
+                    if endgame {
+                        outcomes[(expected.signum() + 1) as usize] = true;
+                        if moves.is_empty() && !board.game_over() {
+                            endgame_passes += 1;
+                        }
+                        let (pos, score) =
+                            player.search_with_depth(&board, u32::MAX, SearchMode::Wdl);
+                        assert_eq!(score, expected.signum(), "board={board:?}");
+                        if moves.is_empty() {
+                            assert_eq!(pos, 0);
+                        } else {
+                            assert!(moves.contains(&pos));
+                            assert_eq!(
+                                (-minimax(&player, board.do_move(pos), depth, true)).signum(),
+                                expected.signum()
+                            );
+                        }
+                    }
                     assert_eq!(score, expected, "board={board:?}, depth={depth}");
                     if moves.is_empty() {
                         assert_eq!(pos, 0);
@@ -427,5 +469,7 @@ mod tests {
             }
         }
         assert!(passes > 0);
+        assert!(endgame_passes > 0);
+        assert!(outcomes.into_iter().all(|seen| seen));
     }
 }

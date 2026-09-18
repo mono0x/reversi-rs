@@ -7,9 +7,9 @@ mod bitboard;
 mod search;
 
 use bitboard::BitBoard;
-use search::AIPlayer;
+use search::{AIPlayer, SearchMode};
 
-fn positions() -> Vec<(&'static str, BitBoard, u32, bool)> {
+fn positions() -> Vec<(&'static str, BitBoard, u32, SearchMode)> {
     let mut board = BitBoard::new();
     let mut positions = Vec::new();
     let mut played = 0;
@@ -20,17 +20,23 @@ fn positions() -> Vec<(&'static str, BitBoard, u32, bool)> {
             continue;
         }
         match played {
-            0 => positions.push(("opening", board, 5, false)),
-            20 => positions.push(("middlegame", board, 5, false)),
-            36 => positions.push(("late_middlegame", board, 5, false)),
-            50 => positions.push(("endgame_10", board, u32::MAX, true)),
-            52 => positions.push(("endgame_8", board, u32::MAX, true)),
+            0 => positions.push(("opening", board, 5, SearchMode::Midgame)),
+            20 => positions.push(("middlegame", board, 5, SearchMode::Midgame)),
+            36 => positions.push(("late_middlegame", board, 5, SearchMode::Midgame)),
+            42 => positions.push(("wdl_18", board, u32::MAX, SearchMode::Wdl)),
+            44 => {
+                positions.push(("wdl_16", board, u32::MAX, SearchMode::Wdl));
+                positions.push(("endgame_16", board, u32::MAX, SearchMode::Exact));
+            }
+            46 => positions.push(("endgame_14", board, u32::MAX, SearchMode::Exact)),
+            50 => positions.push(("endgame_10", board, u32::MAX, SearchMode::Exact)),
+            52 => positions.push(("endgame_8", board, u32::MAX, SearchMode::Exact)),
             _ => {}
         }
         board = board.do_move(*moves.last().unwrap());
         played += 1;
     }
-    assert_eq!(positions.len(), 5);
+    assert_eq!(positions.len(), 9);
     positions
 }
 
@@ -38,10 +44,10 @@ fn bench_search(c: &mut Criterion) {
     let player = AIPlayer {};
     let positions = positions();
     let mut group = c.benchmark_group("search");
-    for (name, board, depth, endgame) in &positions {
+    for (name, board, depth, mode) in &positions {
         group.bench_function(*name, |b| {
             b.iter(|| {
-                player.search_with_depth(black_box(board), black_box(*depth), black_box(*endgame))
+                player.search_with_depth(black_box(board), black_box(*depth), black_box(*mode))
             })
         });
     }
