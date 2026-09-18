@@ -187,7 +187,7 @@ impl AIPlayer {
         let mut alpha = alpha;
         let mut best = -i32::MAX;
 
-        if depth == 1 {
+        if depth == 1 || (endgame && (board.bits.0 | board.bits.1).count_zeros() == 1) {
             while moves != 0 {
                 let score = -self.evaluate(&board.do_move(take_move(&mut moves)), endgame);
                 if score >= beta {
@@ -196,6 +196,17 @@ impl AIPlayer {
                 best = best.max(score);
             }
             return best;
+        }
+
+        if moves.is_power_of_two() {
+            return -self.negamax(
+                &board.do_move(moves),
+                false,
+                depth - 1,
+                endgame,
+                -beta,
+                -alpha,
+            );
         }
 
         let mut children = [(0, *board); 64];
