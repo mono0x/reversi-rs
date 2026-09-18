@@ -145,36 +145,15 @@ impl BitBoard {
     // 8 01111110 => 7e
     const HORIZONTAL_MASK: u64 = 0x7e7e7e7e7e7e7e7e;
 
-    //   abcdefgh
-    // 1 00000000 => 00
-    // 2 11111111 => ff
-    // 3 11111111 => ff
-    // 4 11111111 => ff
-    // 5 11111111 => ff
-    // 6 11111111 => ff
-    // 7 11111111 => ff
-    // 8 00000000 => 00
-    const VERTICAL_MASK: u64 = 0x00ffffffffffff00;
-
-    //   abcdefgh
-    // 1 00000000 => 00
-    // 2 01111110 => 7e
-    // 3 01111110 => 7e
-    // 4 01111110 => 7e
-    // 5 01111110 => 7e
-    // 6 01111110 => 7e
-    // 7 01111110 => 7e
-    // 8 00000000 => 00
-    const DIAGONAL_MASK: u64 = 0x007e7e7e7e7e7e00;
-
+    // Vertical overflow is discarded by the shift itself; only file wrap needs masking.
     const SHIFT_AND_MASKS: [(u32, u64); 4] = [
         // horizontal
         (1, Self::HORIZONTAL_MASK),
         // vertical
-        (8, Self::VERTICAL_MASK),
+        (8, u64::MAX),
         // digonal
-        (7, Self::DIAGONAL_MASK),
-        (9, Self::DIAGONAL_MASK),
+        (7, Self::HORIZONTAL_MASK),
+        (9, Self::HORIZONTAL_MASK),
     ];
 }
 
