@@ -145,8 +145,35 @@ impl Game {
     }
 }
 
+fn player(name: &str) -> io::Result<Box<dyn Player>> {
+    match name {
+        "ai" => Ok(Box::new(AIPlayer {})),
+        "random" => Ok(Box::new(RandomPlayer {})),
+        "human" => Ok(Box::new(HumanPlayer {})),
+        _ => Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("unknown player: {name}; expected ai, random, or human"),
+        )),
+    }
+}
+
 fn main() -> io::Result<()> {
-    let mut game = Game::new(Box::new(AIPlayer {}), Box::new(RandomPlayer {}));
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if matches!(args.first().map(String::as_str), Some("--help" | "-h")) {
+        println!("Usage: reversi-rs [BLACK WHITE]\nPlayers: ai, random, human\nDefault: ai random");
+        return Ok(());
+    }
+    let (black, white) = match args.as_slice() {
+        [] => ("ai", "random"),
+        [black, white] => (black.as_str(), white.as_str()),
+        _ => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "expected BLACK WHITE; use --help for usage",
+            ))
+        }
+    };
+    let mut game = Game::new(player(black)?, player(white)?);
     game.play()?;
     Ok(())
 }
