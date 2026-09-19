@@ -4,11 +4,9 @@ use std::io;
 use std::io::Write;
 
 mod bitboard;
-mod jev;
 mod search;
 
 use bitboard::BitBoard;
-use jev::JevPlayer;
 use search::AIPlayer;
 
 pub fn pos(x: u32, y: u32) -> u64 {
@@ -152,10 +150,9 @@ fn player(name: &str) -> io::Result<Box<dyn Player>> {
         "ai" => Ok(Box::new(AIPlayer {})),
         "random" => Ok(Box::new(RandomPlayer {})),
         "human" => Ok(Box::new(HumanPlayer {})),
-        "jev" => Ok(Box::new(JevPlayer::from_env()?)),
         _ => Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            format!("unknown player: {name}; expected ai, random, human, or jev"),
+            format!("unknown player: {name}; expected ai, random, or human"),
         )),
     }
 }
@@ -163,7 +160,7 @@ fn player(name: &str) -> io::Result<Box<dyn Player>> {
 fn main() -> io::Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if matches!(args.first().map(String::as_str), Some("--help" | "-h")) {
-        println!("Usage: reversi-rs [BLACK WHITE]\nPlayers: ai, random, human, jev\nDefault: ai random\nJev requires TYPESAFE_API_KEY; TYPESAFE_MODEL defaults to jev-latest.");
+        println!("Usage: reversi-rs [BLACK WHITE]\nPlayers: ai, random, human\nDefault: ai random");
         return Ok(());
     }
     let (black, white) = match args.as_slice() {
